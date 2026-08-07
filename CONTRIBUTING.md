@@ -1,6 +1,6 @@
-# Contributing to Mem0Swift
+# Contributing to SynapseMemory
 
-Thank you for helping build Mem0Swift!
+Thank you for helping build SynapseMemory!
 
 ## Development Guidelines
 
@@ -10,4 +10,4 @@ Thank you for helping build Mem0Swift!
    ```bash
    swift test
    ```
-4. **Documentation**: Update DocC catalog documentation in `Sources/Mem0Swift/Documentation.docc` whenever public API signatures change.
+4. **Documentation**: Update DocC catalog documentation in `Sources/SynapseMemory/Documentation.docc` whenever public API signatures change.

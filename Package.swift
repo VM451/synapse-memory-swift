@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "Mem0Swift",
+    name: "SynapseMemory",
     platforms: [
         .iOS("27.0"),
         .macOS("27.0"),
@@ -11,8 +11,8 @@ let package = Package(
     ],
     products: [
         .library(
-            name: "Mem0Swift",
-            targets: ["Mem0Swift"]
+            name: "SynapseMemory",
+            targets: ["SynapseMemory"]
         ),
     ],
     dependencies: [
@@ -20,7 +20,7 @@ let package = Package(
     ],
     targets: [
         .target(
-            name: "Mem0Swift",
+            name: "SynapseMemory",
             dependencies: [
                 .product(name: "GRDB", package: "GRDB.swift")
             ],
@@ -32,8 +32,8 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "Mem0SwiftTests",
-            dependencies: ["Mem0Swift"]
+            name: "SynapseMemoryTests",
+            dependencies: ["SynapseMemory"]
         ),
     ]
 )
