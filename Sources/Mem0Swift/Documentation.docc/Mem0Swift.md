@@ -4,7 +4,7 @@ A native Swift, local-first AI memory framework uniting the innovations of Mem0,
 
 ## Overview
 
-Mem0Swift provides persistent long-term memory for Apple Intelligence agentic systems, virtual assistants, and conversational native applications running on Apple platforms (iOS 17+, macOS 14+, visionOS 1+, watchOS 10+).
+Mem0Swift provides persistent long-term memory for Apple Intelligence agentic systems, virtual assistants, and conversational native applications running on modern Apple platforms (**iOS 27.0+**, **macOS 27.0+**, **visionOS 27.0+**, **watchOS 20.0+**).
 
 It automatically extracts structured user facts, preferences, and entity-relationship knowledge graphs using Apple Foundation Models, indexes float array vectors locally using Apple's `Accelerate.framework` (SIMD/vDSP) and SQLite FTS5, ingests documents and bookmarks (Supermemory), provides 3-tier memory management (Letta/MemGPT), dialogue summarization (Zep), and synchronizes memory state privately across user devices using CloudKit without requiring external backend server infrastructure.
 

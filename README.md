@@ -1,7 +1,7 @@
 # Mem0Swift
 
 [![Swift 6.0](https://img.shields.io/badge/Swift-6.0-orange.svg?style=flat)](https://swift.org)
-[![Target Platform](https://img.shields.io/badge/Platform-iOS%2017+%20|%20macOS%2014+%20|%20visionOS%201+-black.svg?logo=apple)](https://developer.apple.com)
+[![Target Platform](https://img.shields.io/badge/Platform-iOS%2027+%20|%20macOS%2027+%20|%20visionOS%2027+%20|%20watchOS%2020+-black.svg?logo=apple)](https://developer.apple.com)
 [![Storage](https://img.shields.io/badge/Storage-Apple%20CloudKit%20Private%20Sync-blue.svg)](https://developer.apple.com/icloud/cloudkit/)
 [![Cost](https://img.shields.io/badge/Hosting%20Cost-$0.00%20(Zero%20Servers)-green.svg)](https://github.com/VM451/mem0-swift)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -9,6 +9,8 @@
 > **The Ultimate Local-First Agentic Memory Framework for Apple Silicon.**
 > 
 > Uniting the best architectural innovations of **Mem0**, **Supermemory**, **Letta/MemGPT**, and **Zep** into a unified, lightweight native Swift library. **100% on-device execution with zero cloud hosting costs**, seamlessly synced across user Apple devices via **Apple CloudKit private database**.
+> 
+> **Target Platforms**: **iOS 27.0+**, **macOS 27.0+**, **visionOS 27.0+**, **watchOS 20.0+**.
 
 ---
 
@@ -85,8 +87,8 @@ Why pay recurring server bills or manage Docker containers when Apple Silicon ca
 4. **All-In-One Unified Agentic Memory**: Unites the best features of Mem0 (Knowledge Graph), Supermemory (Document Ingest), Letta (Hierarchical Working & Recall Memory), and Zep (Rolling Dialogue Summarizer) into one cohesive Swift 6 library.
 5. **Deep Apple Ecosystem Integration**: Indexes memories directly into iOS/macOS system search (`CoreSpotlight`), exposes Siri Shortcuts via `AppIntents`, and consolidates memories during idle charging states via `BGTaskScheduler`.
 
-#### ⚖️ Scope & Design Boundaries:
-- **Engineered Exclusively for Apple Platforms**: Mem0Swift is purpose-built for **iOS 17+**, **macOS 14+**, **visionOS 1+**, and **watchOS 10+**. If you require a remote Python web server hosting memories for non-Apple web applications, use the original Python-based Mem0 library. For native Apple applications, Mem0Swift is orders of magnitude faster, cheaper, and more private.
+#### ⚖️ Target Scope & Modern Apple Platforms:
+- **Engineered Exclusively for Modern Apple Platforms**: Mem0Swift is targeted specifically for **iOS 27.0+**, **macOS 27.0+**, **visionOS 27.0+**, and **watchOS 20.0+** to take maximum advantage of the latest Apple Silicon hardware instructions, Swift 6 strict concurrency, and Apple Foundation Model system APIs.
 
 ---
 

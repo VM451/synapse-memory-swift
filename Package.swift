@@ -4,10 +4,10 @@ import PackageDescription
 let package = Package(
     name: "Mem0Swift",
     platforms: [
-        .iOS(.v17),
-        .macOS(.v14),
-        .visionOS(.v1),
-        .watchOS(.v10)
+        .iOS("27.0"),
+        .macOS("27.0"),
+        .visionOS("27.0"),
+        .watchOS("20.0")
     ],
     products: [
         .library(
