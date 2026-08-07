@@ -2,6 +2,7 @@ import Foundation
 import OSLog
 
 /// Primary entry point for Mem0Swift library. Manages local vector storage, Knowledge Graph extraction,
+/// Supermemory document ingestion, Letta hierarchical recall memory, Zep dialogue summaries,
 /// Spotlight search indexing, working memory blocks, and CloudKit background sync.
 public actor Mem0Client: CoreMemoryManager, MemoryAgentTool {
     /// Global shared client reference for AppIntents / Siri integration.
@@ -11,6 +12,8 @@ public actor Mem0Client: CoreMemoryManager, MemoryAgentTool {
     public let vectorStore: VectorStore
     public let graphStore: GraphStore
     public let extractor: MemoryExtractor
+    public let summarizer: DialogueSummarizer
+    public let chunker: ContentChunker
     public let syncEngine: CloudKitSyncEngine?
     public let spotlightIndexer: CoreSpotlightIndexer
 
@@ -39,6 +42,9 @@ public actor Mem0Client: CoreMemoryManager, MemoryAgentTool {
             customExtractionPrompt: config.customExtractionPrompt
         )
 
+        self.summarizer = DialogueSummarizer(llmProvider: config.llmProvider)
+        self.chunker = ContentChunker()
+
         if config.enableAutoSync {
             let engine = CloudKitSyncEngine(containerId: config.cloudKitContainerId)
             self.syncEngine = engine
@@ -54,7 +60,7 @@ public actor Mem0Client: CoreMemoryManager, MemoryAgentTool {
         Self.shared = self
     }
 
-    // MARK: - Public Client APIs
+    // MARK: - Public Client Core APIs
 
     /// Extracts and adds/updates memories and knowledge graph relations from conversation turns.
     @discardableResult
@@ -65,6 +71,17 @@ public actor Mem0Client: CoreMemoryManager, MemoryAgentTool {
         runId: String? = nil,
         metadata: [String: String] = [:]
     ) async throws -> MemoryChangeset {
+        // Log into chronological recall memory (Letta)
+        for msg in messages {
+            try? await vectorStore.logRecallMessage(message: RecallMessage(
+                role: msg.role,
+                content: msg.content,
+                userId: userId,
+                agentId: agentId,
+                runId: runId
+            ))
+        }
+
         let changeset = try await extractor.extractAndApply(
             messages: messages,
             userId: userId,
@@ -275,7 +292,7 @@ public actor Mem0Client: CoreMemoryManager, MemoryAgentTool {
         try await graphStore.deleteAll(userId: userId, agentId: agentId, runId: runId)
     }
 
-    /// Completely wipe all stored memories, history logs, and working blocks.
+    /// Completely wipe all stored memories, history logs, documents, and working blocks.
     public func reset() async throws {
         try await vectorStore.reset()
         try await graphStore.deleteAll(userId: nil, agentId: nil, runId: nil)
@@ -284,6 +301,100 @@ public actor Mem0Client: CoreMemoryManager, MemoryAgentTool {
     /// Retrieve audit history logs.
     public func history(memoryId: UUID? = nil, userId: String? = nil) async throws -> [MemoryHistoryItem] {
         return try await vectorStore.fetchHistory(memoryId: memoryId, userId: userId)
+    }
+
+    // MARK: - Supermemory Document & Bookmark Ingestion
+
+    /// Ingests a long document, bookmark, or article with automatic chunking, tagging, and vector indexing.
+    @discardableResult
+    public func ingest(
+        content: String,
+        title: String,
+        url: String? = nil,
+        userId: String? = nil,
+        tags: [String] = [],
+        metadata: [String: String] = [:]
+    ) async throws -> [DocumentItem] {
+        let chunks = chunker.chunk(text: content)
+        let autoTags = tags.isEmpty ? chunker.extractTags(text: content) : tags
+        
+        var documents: [DocumentItem] = []
+        for (index, chunkText) in chunks.enumerated() {
+            let vector = try await config.embeddingProvider.embed(text: "\(title)\n\(chunkText)")
+            let doc = DocumentItem(
+                title: title,
+                url: url,
+                content: chunkText,
+                chunkIndex: index,
+                totalChunks: chunks.count,
+                vector: vector,
+                tags: autoTags,
+                userId: userId,
+                metadata: metadata
+            )
+            try await vectorStore.saveDocument(doc: doc)
+            documents.append(doc)
+        }
+
+        return documents
+    }
+
+    /// Search ingested documents and bookmarks by query.
+    public func searchDocuments(
+        query: String,
+        userId: String? = nil,
+        limit: Int = 5
+    ) async throws -> [DocumentItem] {
+        let vector = try await config.embeddingProvider.embed(text: query)
+        return try await vectorStore.searchDocuments(query: query, vector: vector, limit: limit, userId: userId)
+    }
+
+    // MARK: - Letta/MemGPT Hierarchical Recall Memory
+
+    /// Retrieves chronological conversation turns for message playback and short-term dialogue recall.
+    public func recall(
+        userId: String? = nil,
+        agentId: String? = nil,
+        runId: String? = nil,
+        limit: Int? = 50
+    ) async throws -> [RecallMessage] {
+        return try await vectorStore.fetchRecallMessages(userId: userId, agentId: agentId, runId: runId, limit: limit)
+    }
+
+    // MARK: - Zep Dialogue Summarization
+
+    /// Generates and stores a progressive rolling dialogue summary for a user conversation.
+    @discardableResult
+    public func summarize(
+        messages: [Message],
+        userId: String? = nil,
+        agentId: String? = nil,
+        runId: String? = nil
+    ) async throws -> ConversationSummary {
+        let existingSummary = try await vectorStore.fetchSummary(userId: userId, agentId: agentId, runId: runId)
+        let newSummaryText = try await summarizer.summarize(messages: messages, priorSummary: existingSummary?.summary)
+        
+        let summaryObj = ConversationSummary(
+            id: existingSummary?.id ?? UUID(),
+            userId: userId,
+            agentId: agentId,
+            runId: runId,
+            summary: newSummaryText,
+            messageCount: (existingSummary?.messageCount ?? 0) + messages.count,
+            lastMessageTimestamp: Date()
+        )
+
+        try await vectorStore.saveSummary(summary: summaryObj)
+        return summaryObj
+    }
+
+    /// Fetches the latest rolling dialogue summary for a user.
+    public func getConversationSummary(
+        userId: String? = nil,
+        agentId: String? = nil,
+        runId: String? = nil
+    ) async throws -> ConversationSummary? {
+        return try await vectorStore.fetchSummary(userId: userId, agentId: agentId, runId: runId)
     }
 
     // MARK: - Knowledge Graph APIs
@@ -302,14 +413,12 @@ public actor Mem0Client: CoreMemoryManager, MemoryAgentTool {
     public func sync() async throws {
         guard let syncEngine = syncEngine else { return }
         
-        // 1. Upload pending local vector memories
         let pendingUploads = try await vectorStore.fetchPendingSyncItems()
         if !pendingUploads.isEmpty {
             try await syncEngine.upload(memories: pendingUploads)
             try await vectorStore.markSynced(ids: pendingUploads.map { $0.id })
         }
 
-        // 2. Upload pending knowledge graph entities & relations
         let (pendingEntities, pendingRelations) = try await graphStore.fetchPendingSyncGraph()
         if !pendingEntities.isEmpty || !pendingRelations.isEmpty {
             try await syncEngine.uploadGraph(entities: pendingEntities, relations: pendingRelations)

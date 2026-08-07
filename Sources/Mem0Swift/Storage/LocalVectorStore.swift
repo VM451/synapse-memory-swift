@@ -3,6 +3,7 @@ import GRDB
 import Accelerate
 
 /// Concrete local database store backed by SQLite (via GRDB) and Accelerate framework SIMD vector operations.
+/// Supports Core Memories, Knowledge Graph, Documents/Bookmarks (Supermemory), Recall Dialogue Logs (Letta), and Summaries (Zep).
 public actor LocalVectorStore: VectorStore {
     private let dbQueue: DatabaseQueue
     private let alpha: Float // Vector similarity weight (default 0.7)
@@ -95,6 +96,49 @@ public actor LocalVectorStore: VectorStore {
             try db.create(table: "core_memory_blocks") { t in
                 t.column("blockKey", .text).primaryKey()
                 t.column("blockValue", .text).notNull()
+                t.column("updatedAt", .double).notNull()
+            }
+        }
+
+        migrator.registerMigration("v2_add_supermemory_and_zep_tables") { db in
+            // Documents & Bookmarks Table (Supermemory)
+            try db.create(table: "documents") { t in
+                t.column("id", .text).primaryKey()
+                t.column("title", .text).notNull()
+                t.column("url", .text)
+                t.column("content", .text).notNull()
+                t.column("chunkIndex", .integer).notNull().defaults(to: 0)
+                t.column("totalChunks", .integer).notNull().defaults(to: 1)
+                t.column("vectorData", .blob)
+                t.column("tagsJson", .text)
+                t.column("userId", .text)
+                t.column("metadataJson", .text)
+                t.column("createdAt", .double).notNull()
+                t.column("updatedAt", .double).notNull()
+                t.column("isDeleted", .boolean).notNull().defaults(to: false)
+            }
+
+            // Recall Message Log Table (Letta/MemGPT)
+            try db.create(table: "recall_messages") { t in
+                t.column("id", .text).primaryKey()
+                t.column("role", .text).notNull()
+                t.column("content", .text).notNull()
+                t.column("userId", .text)
+                t.column("agentId", .text)
+                t.column("runId", .text)
+                t.column("timestamp", .double).notNull()
+            }
+
+            // Conversation Summaries Table (Zep)
+            try db.create(table: "conversation_summaries") { t in
+                t.column("id", .text).primaryKey()
+                t.column("userId", .text)
+                t.column("agentId", .text)
+                t.column("runId", .text)
+                t.column("summary", .text).notNull()
+                t.column("messageCount", .integer).notNull().defaults(to: 0)
+                t.column("lastMessageTimestamp", .double).notNull()
+                t.column("createdAt", .double).notNull()
                 t.column("updatedAt", .double).notNull()
             }
         }
@@ -253,6 +297,9 @@ public actor LocalVectorStore: VectorStore {
             try db.execute(sql: "DELETE FROM memories_fts")
             try db.execute(sql: "DELETE FROM memory_history")
             try db.execute(sql: "DELETE FROM core_memory_blocks")
+            try db.execute(sql: "DELETE FROM documents")
+            try db.execute(sql: "DELETE FROM recall_messages")
+            try db.execute(sql: "DELETE FROM conversation_summaries")
         }
     }
 
@@ -265,7 +312,6 @@ public actor LocalVectorStore: VectorStore {
         let candidates = try await fetchAll(filters: filters)
         guard !candidates.isEmpty else { return [] }
         
-        // FTS5 BM25 text rank lookup if query is present
         var textScores: [UUID: Float] = [:]
         if let query = query, !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             let ftsResults = try await dbQueue.read { db -> [Row] in
@@ -291,7 +337,6 @@ public actor LocalVectorStore: VectorStore {
 
         let now = Date().timeIntervalSince1970
         
-        // Hybrid scoring
         var results: [SearchResult] = []
         for item in candidates {
             var vectorSim: Float? = nil
@@ -302,11 +347,9 @@ public actor LocalVectorStore: VectorStore {
             let textRank = textScores[item.id] ?? 0.0
             let vScore = vectorSim ?? 0.0
             
-            // Time decay multiplier: e^(-lambda * delta_days)
             let ageInDays = Float(max(0, now - item.lastAccessedAt.timeIntervalSince1970) / 86400.0)
             let timeDecay = exp(-decayLambda * ageInDays)
             
-            // Score formula: alpha * S_vector + beta * S_BM25 * timeDecay * scoreWeight
             let finalScore = (alpha * vScore + beta * textRank * timeDecay) * item.scoreWeight
             
             if finalScore > 0 || vector == nil {
@@ -319,23 +362,16 @@ public actor LocalVectorStore: VectorStore {
             }
         }
         
-        // Sort descending by final hybrid score
         results.sort(by: { $0.score > $1.score })
-        
         let trimmedResults = Array(results.prefix(limit))
         
-        // Update access count and timestamp for accessed items asynchronously
         if !trimmedResults.isEmpty {
             let accessedIds = trimmedResults.map { $0.item.id }
             try await dbQueue.write { db in
                 let nowTime = Date().timeIntervalSince1970
                 for id in accessedIds {
                     try db.execute(
-                        sql: """
-                        UPDATE memories
-                        SET accessCount = accessCount + 1, lastAccessedAt = ?
-                        WHERE id = ?
-                        """,
+                        sql: "UPDATE memories SET accessCount = accessCount + 1, lastAccessedAt = ? WHERE id = ?",
                         arguments: [nowTime, id.uuidString]
                     )
                 }
@@ -343,6 +379,241 @@ public actor LocalVectorStore: VectorStore {
         }
         
         return trimmedResults
+    }
+
+    // MARK: - Documents & Bookmarks (Supermemory)
+
+    public func saveDocument(doc: DocumentItem) async throws {
+        try await dbQueue.write { db in
+            let vectorData = Data(bytes: doc.vector, count: doc.vector.count * MemoryLayout<Float>.size)
+            let tagsData = try JSONEncoder().encode(doc.tags)
+            let tagsJson = String(data: tagsData, encoding: .utf8) ?? "[]"
+            let metadataData = try JSONEncoder().encode(doc.metadata)
+            let metadataJson = String(data: metadataData, encoding: .utf8) ?? "{}"
+
+            try db.execute(
+                sql: """
+                INSERT INTO documents (
+                    id, title, url, content, chunkIndex, totalChunks, vectorData,
+                    tagsJson, userId, metadataJson, createdAt, updatedAt, isDeleted
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?
+                ) ON CONFLICT(id) DO UPDATE SET
+                    title = excluded.title,
+                    url = excluded.url,
+                    content = excluded.content,
+                    vectorData = excluded.vectorData,
+                    tagsJson = excluded.tagsJson,
+                    metadataJson = excluded.metadataJson,
+                    updatedAt = excluded.updatedAt,
+                    isDeleted = excluded.isDeleted
+                """,
+                arguments: [
+                    doc.id.uuidString,
+                    doc.title,
+                    doc.url,
+                    doc.content,
+                    doc.chunkIndex,
+                    doc.totalChunks,
+                    vectorData,
+                    tagsJson,
+                    doc.userId,
+                    metadataJson,
+                    doc.createdAt.timeIntervalSince1970,
+                    doc.updatedAt.timeIntervalSince1970,
+                    doc.isDeleted
+                ]
+            )
+        }
+    }
+
+    public func searchDocuments(query: String?, vector: [Float]?, limit: Int, userId: String?) async throws -> [DocumentItem] {
+        try await dbQueue.read { db in
+            var sql = "SELECT * FROM documents WHERE isDeleted = 0"
+            var args: [DatabaseValueConvertible] = []
+            if let userId = userId {
+                sql += " AND (userId = ? OR userId IS NULL)"
+                args.append(userId)
+            }
+            
+            let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
+            var docs: [DocumentItem] = []
+            for row in rows {
+                var docVector: [Float] = []
+                if let vectorBlob: Data = row["vectorData"] {
+                    docVector = vectorBlob.withUnsafeBytes { buffer in
+                        Array(buffer.bindMemory(to: Float.self))
+                    }
+                }
+                
+                var tags: [String] = []
+                if let tagsJson: String = row["tagsJson"], let data = tagsJson.data(using: .utf8) {
+                    tags = (try? JSONDecoder().decode([String].self, from: data)) ?? []
+                }
+
+                let item = DocumentItem(
+                    id: UUID(uuidString: row["id"]) ?? UUID(),
+                    title: row["title"],
+                    url: row["url"],
+                    content: row["content"],
+                    chunkIndex: row["chunkIndex"],
+                    totalChunks: row["totalChunks"],
+                    vector: docVector,
+                    tags: tags,
+                    userId: row["userId"],
+                    metadata: [:],
+                    createdAt: Date(timeIntervalSince1970: row["createdAt"]),
+                    updatedAt: Date(timeIntervalSince1970: row["updatedAt"]),
+                    isDeleted: row["isDeleted"]
+                )
+                docs.append(item)
+            }
+
+            if let queryVector = vector, !queryVector.isEmpty {
+                docs.sort { doc1, doc2 in
+                    let sim1 = VectorMath.cosineSimilarity(queryVector, doc1.vector)
+                    let sim2 = VectorMath.cosineSimilarity(queryVector, doc2.vector)
+                    return sim1 > sim2
+                }
+            }
+
+            return Array(docs.prefix(limit))
+        }
+    }
+
+    // MARK: - Recall Memory (Letta/MemGPT)
+
+    public func logRecallMessage(message: RecallMessage) async throws {
+        try await dbQueue.write { db in
+            try db.execute(
+                sql: """
+                INSERT INTO recall_messages (id, role, content, userId, agentId, runId, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                arguments: [
+                    message.id.uuidString,
+                    message.role.rawValue,
+                    message.content,
+                    message.userId,
+                    message.agentId,
+                    message.runId,
+                    message.timestamp.timeIntervalSince1970
+                ]
+            )
+        }
+    }
+
+    public func fetchRecallMessages(userId: String?, agentId: String?, runId: String?, limit: Int? = nil) async throws -> [RecallMessage] {
+        try await dbQueue.read { db in
+            var sql = "SELECT * FROM recall_messages WHERE 1=1"
+            var args: [DatabaseValueConvertible] = []
+            
+            if let userId = userId {
+                sql += " AND userId = ?"
+                args.append(userId)
+            }
+            if let agentId = agentId {
+                sql += " AND agentId = ?"
+                args.append(agentId)
+            }
+            if let runId = runId {
+                sql += " AND runId = ?"
+                args.append(runId)
+            }
+            
+            sql += " ORDER BY timestamp ASC"
+            if let limit = limit {
+                sql += " LIMIT \(limit)"
+            }
+
+            let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
+            return rows.compactMap { row -> RecallMessage? in
+                guard let idStr: String = row["id"],
+                      let id = UUID(uuidString: idStr),
+                      let roleStr: String = row["role"],
+                      let role = Message.Role(rawValue: roleStr),
+                      let content: String = row["content"],
+                      let tsDouble: Double = row["timestamp"]
+                else { return nil }
+
+                return RecallMessage(
+                    id: id,
+                    role: role,
+                    content: content,
+                    userId: row["userId"],
+                    agentId: row["agentId"],
+                    runId: row["runId"],
+                    timestamp: Date(timeIntervalSince1970: tsDouble)
+                )
+            }
+        }
+    }
+
+    // MARK: - Conversation Summaries (Zep)
+
+    public func saveSummary(summary: ConversationSummary) async throws {
+        try await dbQueue.write { db in
+            try db.execute(
+                sql: """
+                INSERT INTO conversation_summaries (id, userId, agentId, runId, summary, messageCount, lastMessageTimestamp, createdAt, updatedAt)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    summary = excluded.summary,
+                    messageCount = excluded.messageCount,
+                    lastMessageTimestamp = excluded.lastMessageTimestamp,
+                    updatedAt = excluded.updatedAt
+                """,
+                arguments: [
+                    summary.id.uuidString,
+                    summary.userId,
+                    summary.agentId,
+                    summary.runId,
+                    summary.summary,
+                    summary.messageCount,
+                    summary.lastMessageTimestamp.timeIntervalSince1970,
+                    summary.createdAt.timeIntervalSince1970,
+                    summary.updatedAt.timeIntervalSince1970
+                ]
+            )
+        }
+    }
+
+    public func fetchSummary(userId: String?, agentId: String?, runId: String?) async throws -> ConversationSummary? {
+        try await dbQueue.read { db in
+            var sql = "SELECT * FROM conversation_summaries WHERE 1=1"
+            var args: [DatabaseValueConvertible] = []
+            
+            if let userId = userId {
+                sql += " AND userId = ?"
+                args.append(userId)
+            }
+            if let agentId = agentId {
+                sql += " AND agentId = ?"
+                args.append(agentId)
+            }
+            if let runId = runId {
+                sql += " AND runId = ?"
+                args.append(runId)
+            }
+            sql += " ORDER BY updatedAt DESC LIMIT 1"
+
+            guard let row = try Row.fetchOne(db, sql: sql, arguments: StatementArguments(args)) else {
+                return nil
+            }
+
+            return ConversationSummary(
+                id: UUID(uuidString: row["id"]) ?? UUID(),
+                userId: row["userId"],
+                agentId: row["agentId"],
+                runId: row["runId"],
+                summary: row["summary"],
+                messageCount: row["messageCount"],
+                lastMessageTimestamp: Date(timeIntervalSince1970: row["lastMessageTimestamp"]),
+                createdAt: Date(timeIntervalSince1970: row["createdAt"]),
+                updatedAt: Date(timeIntervalSince1970: row["updatedAt"])
+            )
+        }
     }
 
     // MARK: - History / Auditing
