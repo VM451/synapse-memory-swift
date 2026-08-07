@@ -1,6 +1,6 @@
 import Foundation
 
-/// Configuration options for initializing Mem0Client.
+/// Configuration options for initializing Mem0Client. Default values prioritize Apple Foundation Models & CloudKit.
 public struct Mem0Config: Sendable {
     public var llmProvider: LLMProvider
     public var embeddingProvider: EmbeddingProvider
@@ -11,8 +11,8 @@ public struct Mem0Config: Sendable {
     public var databasePath: String?
 
     public init(
-        llmProvider: LLMProvider,
-        embeddingProvider: EmbeddingProvider,
+        llmProvider: LLMProvider = AppleFoundationModelProvider(),
+        embeddingProvider: EmbeddingProvider = AppleFoundationModelProvider(),
         customVectorStore: VectorStore? = nil,
         cloudKitContainerId: String? = nil,
         enableAutoSync: Bool = true,

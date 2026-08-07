@@ -1,37 +1,34 @@
 # Mem0Swift
 
 [![Swift 6.0](https://img.shields.io/badge/Swift-6.0-orange.svg?style=flat)](https://swift.org)
-[![Platforms](https://img.shields.io/badge/Platforms-iOS%2017%2B%20%7C%20macOS%2014%2B%20%7C%20visionOS%201%2B%20%7C%20watchOS%2010%2B-blue.svg)](https://developer.apple.com)
-[![CloudKit Sync](https://img.shields.io/badge/CloudKit-Private%20Sync-green.svg)](https://developer.apple.com/icloud/cloudkit/)
+[![Target Platform](https://img.shields.io/badge/Platform-Apple%20Foundation%20Models-black.svg?logo=apple)](https://developer.apple.com)
+[![CloudKit Sync](https://img.shields.io/badge/Storage-Apple%20CloudKit-blue.svg)](https://developer.apple.com/icloud/cloudkit/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> Local-first, bi-temporal AI memory framework for Apple platforms with native CloudKit synchronization.
+> **Native Swift AI Memory Library Purpose-Built Specifically for Apple Foundation Models & CloudKit.**
 
-Inspired by [mem0](https://github.com/mem0ai/mem0), **Mem0Swift** gives AI agents, assistants, and Apple native applications intelligent long-term memory across conversation turns without requiring external server infrastructure (Postgres/Qdrant/Pinecone).
+**Mem0Swift** is a lightweight, local-first memory framework engineered specifically for **Apple Foundation Models**, **Apple Intelligence agentic systems**, and **Apple CloudKit private database storage**. It automatically extracts, organizes, deduplicates, and retrieves user/agent memories across conversation turns running directly on Apple Silicon.
 
 ---
 
 ## ⚡ 30-Second Quick Start
 
+Zero configuration required — defaults 100% to **Apple Foundation Models** and **Apple CloudKit**:
+
 ```swift
 import Mem0Swift
 
-// 1. Initialize Configuration & Client
-let config = Mem0Config(
-    llmProvider: OpenAIProvider(apiKey: "sk-..."),
-    embeddingProvider: AppleFoundationModelProvider(),
-    enableAutoSync: true
-)
-let mem0 = try await Mem0Client(config: config)
+// 1. Initialize Mem0Client (Defaults to Apple Foundation Models + CloudKit)
+let mem0 = try await Mem0Client(config: Mem0Config())
 
-// 2. Extract facts from conversation turns
+// 2. Extract facts from conversation turns using Apple Foundation Model
 let messages = [
-    Message(role: .user, content: "Hi, I live in Bangkok and prefer dark mode."),
-    Message(role: .assistant, content: "Got it! I will remember that you live in Bangkok and love dark mode.")
+    Message(role: .user, content: "Hi, I live in Bangkok and prefer dark mode UI."),
+    Message(role: .assistant, content: "Got it! I will remember that you live in Bangkok and prefer dark mode UI.")
 ]
 try await mem0.add(messages: messages, userId: "alex_123")
 
-// 3. Search relevant user memories
+// 3. Query relevant user memory context for Apple Intelligence prompt insertion
 let results = try await mem0.search(query: "Where does the user live?", userId: "alex_123")
 for item in results {
     print("Found Memory: \(item.item.memory) (Score: \(item.score))")
@@ -40,24 +37,25 @@ for item in results {
 
 ---
 
-## 🏗️ Architecture Flow
+## 🏗️ Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                            Mem0Swift Client App                             │
+│                       Apple Intelligence Client App                         │
 └──────────────────────────────────────┬──────────────────────────────────────┘
                                        │
 ┌──────────────────────────────────────▼──────────────────────────────────────┐
 │                              Mem0Client (Actor)                             │
 │ ┌──────────────────────┐ ┌──────────────────────┐ ┌──────────────────────┐ │
-│ │  Memory Extractor    │ │  Retrieval Engine    │ │ Sync Controller      │ │
+│ │ Apple Foundation     │ │ SIMD Vector          │ │ CloudKit Delta       │ │
+│ │ Model Extractor      │ │ Search Engine        │ │ Sync Controller      │ │
 │ └──────────┬───────────┘ └──────────┬───────────┘ └──────────┬───────────┘ │
 └────────────┼────────────────────────┼────────────────────────┼──────────────┘
              │                        │                        │
 ┌────────────▼────────────────────────▼────────────────────────▼──────────────┐
 │                           Core Storage Subsystem                            │
 │ ┌─────────────────────────────────────────────────────────────────────────┐ │
-│ │ Local Hybrid Storage Engine (SQLite FTS5 + Accelerate vDSP Index)       │ │
+│ │ Local Hybrid Storage Engine (SQLite FTS5 + Accelerate SIMD Vector Index)│ │
 │ └────────────────────────────────────┬────────────────────────────────────┘ │
 └──────────────────────────────────────┼──────────────────────────────────────┘
                                        │ CloudKit Engine
@@ -73,15 +71,13 @@ for item in results {
 
 ---
 
-## 🌟 Key Features Matrix
+## 🌟 Designed Exclusively for Apple Native Apps
 
-- [x] **Sub-15ms Local Vector Retrieval**: Accelerated via Apple's `Accelerate.framework` (SIMD/vDSP).
-- [x] **Hybrid Vector + FTS5 Search**: Blends dense cosine similarity vectors with SQLite BM25 full-text keyword ranking.
-- [x] **Zero-Backend CloudKit Sync**: Multi-device state synchronization via private `CKRecordZone`.
-- [x] **On-Device Foundation Models**: Plug-and-play support for Apple `NaturalLanguage` (`NLEmbedding`), CoreML, or remote providers (OpenAI, Ollama).
-- [x] **Bi-Temporal Fact Progression**: Tracks `validFrom`, `validTo`, and `supersededById` to avoid memory pollution.
-- [x] **Letta / MemGPT Core Memory**: Editable working memory blocks exposed as agentic tools.
-- [x] **Apple System Native**: CoreSpotlight system search indexing, Siri AppIntents, and BGTaskScheduler consolidation.
+- **Apple Foundation Models & Guided Generation**: Purpose-built driver for Apple Foundation Models, `@Tool` guided generation schemas, and on-device `NLEmbedding`.
+- **Zero Third-Party Backend Infrastructure**: Uses the end user's personal Apple CloudKit account (`.privateCloudDatabase`) without requiring Postgres/Qdrant/Pinecone server clusters.
+- **Apple Silicon Hardware Accelerated**: Sub-15ms SIMD vector similarity search using Apple's `Accelerate.framework` (`vDSP_dotpr`).
+- **Bi-Temporal Knowledge Progression**: Tracks `validFrom`, `validTo`, and `supersededById` to prevent memory fact pollution over time.
+- **Apple Platform Integration**: Native CoreSpotlight system search indexing, Siri / Shortcuts `AppIntents`, and `BGTaskScheduler` background memory consolidation.
 
 ---
 
@@ -91,7 +87,7 @@ In your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/mem0ai/mem0-swift.git", from: "1.0.0")
+    .package(url: "https://github.com/VM451/mem0-swift.git", from: "1.0.0")
 ]
 ```
 
@@ -99,7 +95,7 @@ dependencies: [
 
 ## 📚 Documentation
 
-Complete Apple DocC documentation catalog is included under `Sources/Mem0Swift/Documentation.docc`. Generate docs locally in Xcode via **Product** -> **Build Documentation**.
+Complete Apple DocC documentation catalog is included under `Sources/Mem0Swift/Documentation.docc`. Generate docs in Xcode via **Product** -> **Build Documentation**.
 
 ---
 

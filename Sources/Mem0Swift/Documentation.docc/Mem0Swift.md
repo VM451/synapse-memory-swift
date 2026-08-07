@@ -1,29 +1,30 @@
 # ``Mem0Swift``
 
-A native Swift, local-first AI memory framework with Apple CloudKit synchronization.
+A native Swift, local-first AI memory framework purpose-built for Apple Foundation Models and Apple CloudKit.
 
 ## Overview
 
-Mem0Swift provides persistent long-term memory for AI agents, virtual assistants, and conversational apps running on Apple platforms (iOS 17+, macOS 14+, visionOS 1+, watchOS 10+).
+Mem0Swift provides persistent long-term memory for Apple Intelligence agentic systems, virtual assistants, and conversational native applications running on Apple platforms (iOS 17+, macOS 14+, visionOS 1+, watchOS 10+).
 
-It automatically extracts structured user facts and preferences from conversation turns, indexes float array vectors locally using Apple's `Accelerate.framework` (SIMD/vDSP) and SQLite FTS5, and synchronizes memory state privately across user devices using CloudKit without requiring external vector databases.
+It automatically extracts structured user facts and preferences using Apple Foundation Models, indexes float array vectors locally using Apple's `Accelerate.framework` (SIMD/vDSP) and SQLite FTS5, and synchronizes memory state privately across user devices using CloudKit without requiring external backend server infrastructure.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                            Mem0Swift Client App                             │
+│                       Apple Intelligence Client App                         │
 └──────────────────────────────────────┬──────────────────────────────────────┘
                                        │
 ┌──────────────────────────────────────▼──────────────────────────────────────┐
 │                              Mem0Client (Actor)                             │
 │ ┌──────────────────────┐ ┌──────────────────────┐ ┌──────────────────────┐ │
-│ │  Memory Extractor    │ │  Retrieval Engine    │ │ Sync Controller      │ │
+│ │ Apple Foundation     │ │ SIMD Vector          │ │ CloudKit Delta       │ │
+│ │ Model Extractor      │ │ Search Engine        │ │ Sync Controller      │ │
 │ └──────────┬───────────┘ └──────────┬───────────┘ └──────────┬───────────┘ │
 └────────────┼────────────────────────┼────────────────────────┼──────────────┘
              │                        │                        │
 ┌────────────▼────────────────────────▼────────────────────────▼──────────────┐
 │                           Core Storage Subsystem                            │
 │ ┌─────────────────────────────────────────────────────────────────────────┐ │
-│ │ Local Hybrid Storage Engine (SQLite FTS5 + Accelerate vDSP Index)       │ │
+│ │ Local Hybrid Storage Engine (SQLite FTS5 + Accelerate SIMD Vector Index)│ │
 │ └────────────────────────────────────┬────────────────────────────────────┘ │
 └──────────────────────────────────────┼──────────────────────────────────────┘
                                        │ CloudKit Engine
@@ -41,6 +42,7 @@ It automatically extracts structured user facts and preferences from conversatio
 
 ### Essentials
 - <doc:GettingStarted>
+- <doc:AppleFoundationModels>
 - <doc:CloudKitSyncGuide>
 - <doc:CustomLLMProvider>
 
@@ -65,8 +67,8 @@ It automatically extracts structured user facts and preferences from conversatio
 - ``EmbeddingProvider``
 - ``LLMProvider``
 - ``MemoryExtractor``
-- ``OpenAIProvider``
 - ``AppleFoundationModelProvider``
+- ``OpenAIProvider``
 
 ### CloudKit Synchronization
 - ``CloudKitSyncEngine``
