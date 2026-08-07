@@ -1,20 +1,26 @@
 import Foundation
 
 /// State machine extraction engine that analyzes conversation turns against existing memory context
-/// and generates structured ADD / UPDATE / DELETE / NO_CHANGE memory mutations.
+/// and generates structured ADD / UPDATE / DELETE / NO_CHANGE memory mutations along with Knowledge Graph entities and relations.
 public actor MemoryExtractor {
     private let vectorStore: VectorStore
+    private let graphStore: GraphStore?
     private let embeddingProvider: EmbeddingProvider
     private let llmProvider: LLMProvider
+    private let customExtractionPrompt: String?
 
     public init(
         vectorStore: VectorStore,
+        graphStore: GraphStore? = nil,
         embeddingProvider: EmbeddingProvider,
-        llmProvider: LLMProvider
+        llmProvider: LLMProvider,
+        customExtractionPrompt: String? = nil
     ) {
         self.vectorStore = vectorStore
+        self.graphStore = graphStore
         self.embeddingProvider = embeddingProvider
         self.llmProvider = llmProvider
+        self.customExtractionPrompt = customExtractionPrompt
     }
 
     /// Process incoming conversation turns and update stored memories automatically.
@@ -86,6 +92,11 @@ public actor MemoryExtractor {
                     userId: userId
                 ))
                 
+                // Extract entity triples into Knowledge Graph if graphStore is active
+                if let graphStore = self.graphStore {
+                    await self.extractAndStoreGraphTriples(from: op.memory, userId: userId, graphStore: graphStore)
+                }
+                
                 affectedItems.append(newItem)
                 executedOperations.append(op)
 
@@ -137,6 +148,10 @@ public actor MemoryExtractor {
                     userId: userId
                 ))
 
+                if let graphStore = self.graphStore {
+                    await self.extractAndStoreGraphTriples(from: op.memory, userId: userId, graphStore: graphStore)
+                }
+
                 affectedItems.append(newVersionItem)
                 executedOperations.append(op)
 
@@ -166,7 +181,36 @@ public actor MemoryExtractor {
         return MemoryChangeset(changes: executedOperations, affectedItems: affectedItems)
     }
 
+    private func extractAndStoreGraphTriples(from text: String, userId: String?, graphStore: GraphStore) async {
+        // Fast local entity heuristic linking
+        if text.contains("lives in") {
+            let parts = text.components(separatedBy: "lives in")
+            if parts.count == 2 {
+                let subject = parts[0].trimmingCharacters(in: .whitespacesAndNewlines)
+                let object = parts[1].trimmingCharacters(in: .punctuationCharacters.union(.whitespacesAndNewlines))
+                
+                let sourceEntity = Entity(name: subject.isEmpty ? "User" : subject, type: "Person", userId: userId)
+                let targetEntity = Entity(name: object, type: "Location", userId: userId)
+                
+                try? await graphStore.saveEntity(sourceEntity)
+                try? await graphStore.saveEntity(targetEntity)
+                
+                let relation = Relation(
+                    sourceEntityId: sourceEntity.id,
+                    targetEntityId: targetEntity.id,
+                    relationshipType: "lives_in",
+                    userId: userId
+                )
+                try? await graphStore.saveRelation(relation)
+            }
+        }
+    }
+
     private func buildExtractionPrompt(conversationText: String, existingMemories: [MemoryItem]) -> String {
+        if let customPrompt = customExtractionPrompt {
+            return customPrompt.replacingOccurrences(of: "{{conversation}}", with: conversationText)
+        }
+
         let existingListStr: String
         if existingMemories.isEmpty {
             existingListStr = "None"

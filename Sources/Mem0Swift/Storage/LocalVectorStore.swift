@@ -188,13 +188,20 @@ public actor LocalVectorStore: VectorStore {
         }
     }
 
-    public func fetchAll(filters: MemoryFilter?) async throws -> [MemoryItem] {
+    public func fetchAll(filters: MemoryFilter?, limit: Int? = nil, offset: Int? = nil) async throws -> [MemoryItem] {
         try await dbQueue.read { db in
             var sql = "SELECT * FROM memories WHERE 1=1"
             var args: [DatabaseValueConvertible] = []
             
             Self.appendFilterConditions(filters: filters, sql: &sql, args: &args)
             sql += " ORDER BY createdAt DESC"
+            
+            if let limit = limit {
+                sql += " LIMIT \(limit)"
+                if let offset = offset {
+                    sql += " OFFSET \(offset)"
+                }
+            }
             
             let rows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
             return try rows.map { try Self.rowToMemoryItem($0) }
@@ -213,6 +220,39 @@ public actor LocalVectorStore: VectorStore {
                 arguments: [now, id.uuidString]
             )
             try db.execute(sql: "DELETE FROM memories_fts WHERE id = ?", arguments: [id.uuidString])
+        }
+    }
+
+    public func deleteAll(userId: String?, agentId: String?, runId: String?) async throws {
+        try await dbQueue.write { db in
+            let now = Date().timeIntervalSince1970
+            var sql = "UPDATE memories SET isDeleted = 1, syncState = 'pendingUpload', updatedAt = ? WHERE 1=1"
+            var args: [DatabaseValueConvertible] = [now]
+            
+            if let userId = userId {
+                sql += " AND userId = ?"
+                args.append(userId)
+            }
+            if let agentId = agentId {
+                sql += " AND agentId = ?"
+                args.append(agentId)
+            }
+            if let runId = runId {
+                sql += " AND runId = ?"
+                args.append(runId)
+            }
+            
+            try db.execute(sql: sql, arguments: StatementArguments(args))
+            try db.execute(sql: "DELETE FROM memories_fts")
+        }
+    }
+
+    public func reset() async throws {
+        try await dbQueue.write { db in
+            try db.execute(sql: "DELETE FROM memories")
+            try db.execute(sql: "DELETE FROM memories_fts")
+            try db.execute(sql: "DELETE FROM memory_history")
+            try db.execute(sql: "DELETE FROM core_memory_blocks")
         }
     }
 

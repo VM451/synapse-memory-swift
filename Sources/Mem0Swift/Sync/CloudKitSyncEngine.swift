@@ -65,9 +65,36 @@ public actor CloudKitSyncEngine {
         }
     }
 
+    /// Upload modified or deleted knowledge graph entities and relations to CloudKit.
+    public func uploadGraph(entities: [Entity], relations: [Relation]) async throws {
+        var records: [CKRecord] = []
+        records.append(contentsOf: entities.map { $0.toCKRecord(zoneID: customZone.zoneID) })
+        records.append(contentsOf: relations.map { $0.toCKRecord(zoneID: customZone.zoneID) })
+        
+        guard !records.isEmpty else { return }
+        
+        let operation = CKModifyRecordsOperation(recordsToSave: records, recordIDsToDelete: nil)
+        operation.savePolicy = .changedKeys
+        operation.qualityOfService = .userInitiated
+        
+        return try await withCheckedThrowingContinuation { continuation in
+            operation.modifyRecordsResultBlock = { result in
+                switch result {
+                case .success:
+                    continuation.resume()
+                case .failure(let error):
+                    continuation.resume(throwing: error)
+                }
+            }
+            self.privateDatabase.add(operation)
+        }
+    }
+
     /// Result structure for incremental sync fetches.
     public struct SyncFetchResult: Sendable {
         public let updatedMemories: [MemoryItem]
+        public let updatedEntities: [Entity]
+        public let updatedRelations: [Relation]
         public let deletedRecordIDs: [UUID]
         public let newChangeToken: CKServerChangeToken?
     }
@@ -75,6 +102,8 @@ public actor CloudKitSyncEngine {
     /// Fetch incremental delta changes from CloudKit using stored change token.
     public func fetchChanges(currentToken: CKServerChangeToken?) async throws -> SyncFetchResult {
         var updatedMemories: [MemoryItem] = []
+        var updatedEntities: [Entity] = []
+        var updatedRelations: [Relation] = []
         var deletedIDs: [UUID] = []
         var newServerToken: CKServerChangeToken? = currentToken
 
@@ -89,8 +118,12 @@ public actor CloudKitSyncEngine {
         return try await withCheckedThrowingContinuation { continuation in
             operation.recordWasChangedBlock = { recordID, result in
                 if case .success(let record) = result {
-                    if let memory = MemoryItem.fromCKRecord(record) {
+                    if record.recordType == "Mem0Memory", let memory = MemoryItem.fromCKRecord(record) {
                         updatedMemories.append(memory)
+                    } else if record.recordType == "Mem0Entity", let entity = Entity.fromCKRecord(record) {
+                        updatedEntities.append(entity)
+                    } else if record.recordType == "Mem0Relation", let relation = Relation.fromCKRecord(record) {
+                        updatedRelations.append(relation)
                     }
                 }
             }
@@ -112,6 +145,8 @@ public actor CloudKitSyncEngine {
                 case .success:
                     continuation.resume(returning: SyncFetchResult(
                         updatedMemories: updatedMemories,
+                        updatedEntities: updatedEntities,
+                        updatedRelations: updatedRelations,
                         deletedRecordIDs: deletedIDs,
                         newChangeToken: newServerToken
                     ))
@@ -131,7 +166,16 @@ public actor CloudKitSyncEngine {
         } else if local.version > remote.version {
             return local
         } else {
-            // Equal versions: Last-Write-Wins timestamp fallback
+            return remote.updatedAt >= local.updatedAt ? remote : local
+        }
+    }
+
+    public nonisolated func resolveEntityConflicts(local: Entity, remote: Entity) -> Entity {
+        if remote.version > local.version {
+            return remote
+        } else if local.version > remote.version {
+            return local
+        } else {
             return remote.updatedAt >= local.updatedAt ? remote : local
         }
     }

@@ -1,7 +1,7 @@
 import Foundation
 import OSLog
 
-/// Primary entry point for Mem0Swift library. Manages local vector storage, structured extraction,
+/// Primary entry point for Mem0Swift library. Manages local vector storage, Knowledge Graph extraction,
 /// Spotlight search indexing, working memory blocks, and CloudKit background sync.
 public actor Mem0Client: CoreMemoryManager, MemoryAgentTool {
     /// Global shared client reference for AppIntents / Siri integration.
@@ -9,13 +9,14 @@ public actor Mem0Client: CoreMemoryManager, MemoryAgentTool {
 
     public let config: Mem0Config
     public let vectorStore: VectorStore
+    public let graphStore: GraphStore
     public let extractor: MemoryExtractor
     public let syncEngine: CloudKitSyncEngine?
     public let spotlightIndexer: CoreSpotlightIndexer
 
     private let logger = Logger(subsystem: "com.mem0.swift", category: "Mem0Client")
 
-    public init(config: Mem0Config) async throws {
+    public init(config: Mem0Config = Mem0Config()) async throws {
         self.config = config
         
         if let store = config.customVectorStore {
@@ -24,10 +25,18 @@ public actor Mem0Client: CoreMemoryManager, MemoryAgentTool {
             self.vectorStore = try LocalVectorStore(databasePath: config.databasePath)
         }
         
+        if let gStore = config.customGraphStore {
+            self.graphStore = gStore
+        } else {
+            self.graphStore = try LocalGraphStore()
+        }
+        
         self.extractor = MemoryExtractor(
             vectorStore: vectorStore,
+            graphStore: graphStore,
             embeddingProvider: config.embeddingProvider,
-            llmProvider: config.llmProvider
+            llmProvider: config.llmProvider,
+            customExtractionPrompt: config.customExtractionPrompt
         )
 
         if config.enableAutoSync {
@@ -47,7 +56,7 @@ public actor Mem0Client: CoreMemoryManager, MemoryAgentTool {
 
     // MARK: - Public Client APIs
 
-    /// Extracts and adds/updates memories based on conversation turn messages.
+    /// Extracts and adds/updates memories and knowledge graph relations from conversation turns.
     @discardableResult
     public func add(
         messages: [Message],
@@ -125,6 +134,48 @@ public actor Mem0Client: CoreMemoryManager, MemoryAgentTool {
         return item
     }
 
+    /// Directly saves multiple raw memory statements in batch.
+    @discardableResult
+    public func batchAdd(
+        memories: [String],
+        userId: String? = nil,
+        agentId: String? = nil,
+        runId: String? = nil,
+        metadata: [String: String] = [:]
+    ) async throws -> [MemoryItem] {
+        var items: [MemoryItem] = []
+        for text in memories {
+            let vector = try await config.embeddingProvider.embed(text: text)
+            let item = MemoryItem(
+                memory: text,
+                vector: vector,
+                userId: userId,
+                agentId: agentId,
+                runId: runId,
+                metadata: metadata
+            )
+            items.append(item)
+        }
+
+        try await vectorStore.saveBatch(items: items)
+        
+        let batchItems = items
+        if config.enableSpotlightIndexing, !batchItems.isEmpty {
+            let indexer = spotlightIndexer
+            Task {
+                try? await indexer.index(memories: batchItems)
+            }
+        }
+
+        if config.enableAutoSync, let syncEngine = syncEngine, !batchItems.isEmpty {
+            Task {
+                try? await syncEngine.upload(memories: batchItems)
+            }
+        }
+
+        return items
+    }
+
     /// Searches relevant memories using vector similarity and BM25 text rank fusion.
     public func search(
         query: String,
@@ -143,14 +194,16 @@ public actor Mem0Client: CoreMemoryManager, MemoryAgentTool {
         return try await vectorStore.fetch(id: id)
     }
 
-    /// Fetch all memories matching optional filters.
+    /// Fetch all memories matching optional filters, with optional pagination.
     public func getAll(
         userId: String? = nil,
         agentId: String? = nil,
-        runId: String? = nil
+        runId: String? = nil,
+        limit: Int? = nil,
+        offset: Int? = nil
     ) async throws -> [MemoryItem] {
         let filter = MemoryFilter(userId: userId, agentId: agentId, runId: runId)
-        return try await vectorStore.fetchAll(filters: filter)
+        return try await vectorStore.fetchAll(filters: filter, limit: limit, offset: offset)
     }
 
     /// Update an existing memory item.
@@ -195,7 +248,7 @@ public actor Mem0Client: CoreMemoryManager, MemoryAgentTool {
         return existing
     }
 
-    /// Delete a memory item.
+    /// Delete a single memory item.
     public func delete(id: UUID) async throws {
         guard let existing = try await vectorStore.fetch(id: id) else { return }
         
@@ -216,20 +269,54 @@ public actor Mem0Client: CoreMemoryManager, MemoryAgentTool {
         }
     }
 
+    /// Bulk delete all memories matching a specific user, agent, or run session.
+    public func deleteAll(userId: String? = nil, agentId: String? = nil, runId: String? = nil) async throws {
+        try await vectorStore.deleteAll(userId: userId, agentId: agentId, runId: runId)
+        try await graphStore.deleteAll(userId: userId, agentId: agentId, runId: runId)
+    }
+
+    /// Completely wipe all stored memories, history logs, and working blocks.
+    public func reset() async throws {
+        try await vectorStore.reset()
+        try await graphStore.deleteAll(userId: nil, agentId: nil, runId: nil)
+    }
+
     /// Retrieve audit history logs.
     public func history(memoryId: UUID? = nil, userId: String? = nil) async throws -> [MemoryHistoryItem] {
         return try await vectorStore.fetchHistory(memoryId: memoryId, userId: userId)
+    }
+
+    // MARK: - Knowledge Graph APIs
+
+    /// Retrieve all knowledge graph entities for a user.
+    public func getEntities(userId: String? = nil) async throws -> [Entity] {
+        return try await graphStore.fetchEntities(userId: userId)
+    }
+
+    /// Retrieve all knowledge graph relational triples for a user.
+    public func getRelations(userId: String? = nil) async throws -> [GraphTriple] {
+        return try await graphStore.fetchTriples(userId: userId)
     }
 
     /// Trigger bi-directional CloudKit delta sync pass manually.
     public func sync() async throws {
         guard let syncEngine = syncEngine else { return }
         
-        // 1. Upload pending local changes
+        // 1. Upload pending local vector memories
         let pendingUploads = try await vectorStore.fetchPendingSyncItems()
         if !pendingUploads.isEmpty {
             try await syncEngine.upload(memories: pendingUploads)
             try await vectorStore.markSynced(ids: pendingUploads.map { $0.id })
+        }
+
+        // 2. Upload pending knowledge graph entities & relations
+        let (pendingEntities, pendingRelations) = try await graphStore.fetchPendingSyncGraph()
+        if !pendingEntities.isEmpty || !pendingRelations.isEmpty {
+            try await syncEngine.uploadGraph(entities: pendingEntities, relations: pendingRelations)
+            try await graphStore.markGraphSynced(
+                entityIds: pendingEntities.map { $0.id },
+                relationIds: pendingRelations.map { $0.id }
+            )
         }
     }
 

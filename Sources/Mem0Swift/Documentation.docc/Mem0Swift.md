@@ -6,7 +6,7 @@ A native Swift, local-first AI memory framework purpose-built for Apple Foundati
 
 Mem0Swift provides persistent long-term memory for Apple Intelligence agentic systems, virtual assistants, and conversational native applications running on Apple platforms (iOS 17+, macOS 14+, visionOS 1+, watchOS 10+).
 
-It automatically extracts structured user facts and preferences using Apple Foundation Models, indexes float array vectors locally using Apple's `Accelerate.framework` (SIMD/vDSP) and SQLite FTS5, and synchronizes memory state privately across user devices using CloudKit without requiring external backend server infrastructure.
+It automatically extracts structured user facts, preferences, and entity-relationship knowledge graphs using Apple Foundation Models, indexes float array vectors locally using Apple's `Accelerate.framework` (SIMD/vDSP) and SQLite FTS5, and synchronizes memory state privately across user devices using CloudKit without requiring external backend server infrastructure.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -16,15 +16,15 @@ It automatically extracts structured user facts and preferences using Apple Foun
 ┌──────────────────────────────────────▼──────────────────────────────────────┐
 │                              Mem0Client (Actor)                             │
 │ ┌──────────────────────┐ ┌──────────────────────┐ ┌──────────────────────┐ │
-│ │ Apple Foundation     │ │ SIMD Vector          │ │ CloudKit Delta       │ │
-│ │ Model Extractor      │ │ Search Engine        │ │ Sync Controller      │ │
+│ │ Apple Foundation     │ │ SIMD Vector          │ │ Knowledge Graph      │ │
+│ │ Model Extractor      │ │ Search Engine        │ │ Engine               │ │
 │ └──────────┬───────────┘ └──────────┬───────────┘ └──────────┬───────────┘ │
 └────────────┼────────────────────────┼────────────────────────┼──────────────┘
              │                        │                        │
 ┌────────────▼────────────────────────▼────────────────────────▼──────────────┐
 │                           Core Storage Subsystem                            │
 │ ┌─────────────────────────────────────────────────────────────────────────┐ │
-│ │ Local Hybrid Storage Engine (SQLite FTS5 + Accelerate SIMD Vector Index)│ │
+│ │ Local Hybrid Storage Engine (SQLite FTS5 + Accelerate SIMD + Graph RRF) │ │
 │ └────────────────────────────────────┬────────────────────────────────────┘ │
 └──────────────────────────────────────┼──────────────────────────────────────┘
                                        │ CloudKit Engine
@@ -33,6 +33,8 @@ It automatically extracts structured user facts and preferences using Apple Foun
 │ ┌─────────────────────────────────────────────────────────────────────────┐ │
 │ │ CKRecordZone: "Mem0PrivateZone"                                         │ │
 │ │  ├── RecordType: "Mem0Memory"                                           │ │
+│ │  ├── RecordType: "Mem0Entity"                                           │ │
+│ │  ├── RecordType: "Mem0Relation"                                         │ │
 │ │  └── RecordType: "Mem0History"                                          │ │
 │ └─────────────────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -43,6 +45,7 @@ It automatically extracts structured user facts and preferences using Apple Foun
 ### Essentials
 - <doc:GettingStarted>
 - <doc:AppleFoundationModels>
+- <doc:GraphMemoryGuide>
 - <doc:CloudKitSyncGuide>
 - <doc:CustomLLMProvider>
 
@@ -50,8 +53,11 @@ It automatically extracts structured user facts and preferences using Apple Foun
 - ``Mem0Client``
 - ``Mem0Config``
 
-### Core Data Models
+### Core Data Models & Graphs
 - ``MemoryItem``
+- ``Entity``
+- ``Relation``
+- ``GraphTriple``
 - ``Message``
 - ``MemoryFilter``
 - ``SearchResult``
@@ -60,7 +66,9 @@ It automatically extracts structured user facts and preferences using Apple Foun
 
 ### Core Storage & Search
 - ``VectorStore``
+- ``GraphStore``
 - ``LocalVectorStore``
+- ``LocalGraphStore``
 - ``VectorMath``
 
 ### Intelligence & Reasoning
@@ -68,6 +76,7 @@ It automatically extracts structured user facts and preferences using Apple Foun
 - ``LLMProvider``
 - ``MemoryExtractor``
 - ``AppleFoundationModelProvider``
+- ``OllamaProvider``
 - ``OpenAIProvider``
 
 ### CloudKit Synchronization

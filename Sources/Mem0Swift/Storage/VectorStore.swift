@@ -19,11 +19,17 @@ public protocol VectorStore: Sendable {
     /// Fetch a memory by its UUID.
     func fetch(id: UUID) async throws -> MemoryItem?
     
-    /// Fetch all memories matching optional filters.
-    func fetchAll(filters: MemoryFilter?) async throws -> [MemoryItem]
+    /// Fetch all memories matching optional filters, with pagination support.
+    func fetchAll(filters: MemoryFilter?, limit: Int?, offset: Int?) async throws -> [MemoryItem]
     
     /// Soft or hard delete a memory item.
     func delete(id: UUID) async throws
+    
+    /// Bulk delete all memories matching a specific scope.
+    func deleteAll(userId: String?, agentId: String?, runId: String?) async throws
+    
+    /// Completely resets and wipes all memory records from local storage.
+    func reset() async throws
     
     /// Log an audit history event.
     func logHistory(item: MemoryHistoryItem) async throws
@@ -36,4 +42,10 @@ public protocol VectorStore: Sendable {
     
     /// Mark items as synced with CloudKit.
     func markSynced(ids: [UUID]) async throws
+}
+
+extension VectorStore {
+    public func fetchAll(filters: MemoryFilter?) async throws -> [MemoryItem] {
+        try await fetchAll(filters: filters, limit: nil, offset: nil)
+    }
 }
