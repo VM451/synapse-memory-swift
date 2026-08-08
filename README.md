@@ -49,6 +49,32 @@ let triples = try await synapse.getRelations(userId: "alex_123")
 
 ---
 
+## 📊 Open-Source Competitor Comparison
+
+Why pay recurring server bills or manage Docker containers when Apple Silicon can run everything on-device for free?
+
+| Capability / Architecture Dimension | SynapseMemory  | Mem0 (Cloud / OSS) | Supermemory | Letta (MemGPT) | Zep |
+|---|:---:|:---:|:---:|:---:|:---:|
+| **Zero Hosting Cost ($0.00 / Zero Server Bills)** | ✅ Yes ($0.00) | ❌ Paid / Docker | ⚠️ Paid Cloud | ⚠️ Self-Hosted | ❌ Subscription |
+| **100% On-Device Local Privacy** | ✅ Complete | ⚠️ Python / Cloud | ❌ Cloud Only | ⚠️ Local Python | ❌ Cloud Only |
+| **Hardware-Accelerated SIMD Vector Search** | ✅ Apple Accelerate (`vDSP`) | ❌ Qdrant / Chroma | ❌ Cloud Index | ❌ Postgres / Chroma | ❌ Cloud Index |
+| **Full-Text BM25 Keyword Search** | ✅ SQLite FTS5 Virtual Tables | ⚠️ SQLite / Postgres | ⚠️ Keyword Search | ⚠️ SQL Search | ⚠️ Hybrid Cloud |
+| **Hybrid Search Fusion (Dense + Sparse + Decay)** | ✅ Vector + BM25 + Time Decay | ⚠️ Hybrid RRF | ❌ Vector Only | ❌ Vector Only | ⚠️ Hybrid Cloud |
+| **Knowledge Graph Memory (Entity Triples)** | ✅ Local SQLite Triples | ✅ Graphiti / NetworkX | ❌ Not Supported | ⚠️ Structured Tools | ✅ Temporal Graphiti |
+| **Bi-Temporal Fact Superseding (`validFrom/validTo`)** | ✅ Built-in | ✅ Built-in | ❌ Not Supported | ❌ Not Supported | ⚠️ Temporal Logs |
+| **Document & Bookmark Ingestion (Chunk & Auto-Tag)** | ✅ Built-in (`ingest()`) | ⚠️ Custom Loaders | ✅ Built-in | ⚠️ Attachments | ❌ Not Supported |
+| **Hierarchical Working Memory Blocks (Persona State)** | ✅ Built-in (`coreBlock`) | ❌ Not Supported | ❌ Not Supported | ✅ Core Architecture | ❌ Not Supported |
+| **Chronological Recall Memory Log & Playback** | ✅ Built-in (`recall()`) | ❌ Not Supported | ❌ Not Supported | ✅ Built-in | ⚠️ Dialog Log |
+| **Rolling Dialogue Summarization & Context Compression** | ✅ Built-in (`summarize()`) | ❌ Not Supported | ❌ Not Supported | ⚠️ Tool Calls | ✅ Core Architecture |
+| **Multi-Device Private Sync (Zero Third-Party DB)** | ✅ Apple CloudKit iCloud | ❌ Cloud DB Cluster | ⚠️ Web Sync | ❌ Server Sync | ❌ Cloud Backend |
+| **On-Device Apple Foundation Models & Guided Generation** | ✅ Native Zero-Config | ❌ Cloud API / Ollama | ❌ Cloud API | ❌ Cloud API / Ollama | ❌ Cloud API |
+| **Local Offline LLM Support (Ollama on Mac)** | ✅ Built-in (`OllamaProvider`) | ⚠️ Local Python | ❌ Cloud Only | ⚠️ Local vLLM | ❌ Cloud Only |
+| **Apple Native Ecosystem (CoreSpotlight & Siri AppIntents)**| ✅ Native iOS/macOS | ❌ Not Supported | ❌ Not Supported | ❌ Not Supported | ❌ Not Supported |
+
+> For a detailed architectural deep dive, see **[Competitor Comparison & Analysis](docs/architecture/competitor-comparison.md)**.
+
+---
+
 ## 📚 Granular Documentation Catalog (`docs/`)
 
 Explore complete, granular documentation inside the [`docs/`](docs/README.md) directory:
