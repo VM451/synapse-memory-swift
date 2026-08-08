@@ -85,7 +85,8 @@ Explore complete, granular documentation inside the [`docs/`](docs/README.md) di
 | | **[Configuration Reference](docs/getting-started/configuration.md)** | `SynapseConfig` options, vector dimensions, and storage settings. |
 | 🏛️ **Architecture** | **[System Architecture](docs/architecture/overview.md)** | Multi-tiered memory engine, actor isolation, and subsystem design. |
 | | **[Competitor Matrix](docs/architecture/competitor-comparison.md)** | Architectural comparison vs Mem0, Supermemory, Letta, and Zep. |
-| 📖 **Guides** | **[Conversational Memory](docs/guides/conversational-memory.md)** | State machine (`ADD`, `UPDATE`, `DELETE`), bi-temporal fact superseding. |
+| 📖 **Guides** | **[Agent & LLM Integration](docs/guides/agent-integration.md)** | Standard OpenAPI/JSON schema tools for `SynapseAgent` & Foundation Models. |
+| | **[Conversational Memory](docs/guides/conversational-memory.md)** | State machine (`ADD`, `UPDATE`, `DELETE`), bi-temporal fact superseding. |
 | | **[Knowledge Graph](docs/guides/knowledge-graph.md)** | Entity triple extraction, SQLite graph store, and graph traversal. |
 | | **[Document Ingestion](docs/guides/document-ingestion.md)** | Supermemory-style document/URL ingestion, chunking, and auto-tagging. |
 | | **[Hybrid Search Engine](docs/guides/hybrid-search.md)** | Fusion of SIMD vector search (`vDSP`), SQLite FTS5 BM25, and time-decay. |
