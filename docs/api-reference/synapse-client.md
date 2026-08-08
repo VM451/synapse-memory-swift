@@ -61,6 +61,54 @@ public func ingest(
 
 ---
 
+### `ingestDocument(fileURL:loader:tags:userId:metadata:)` ⭐ New
+
+Ingests a local file through the full RAG pipeline: loader auto-detection → chunking → embedding → `KnowledgeBaseIndex` storage.
+
+```swift
+public func ingestDocument(
+    fileURL: URL,
+    loader: (any DocumentLoader)? = nil,
+    tags: [String] = [],
+    userId: String? = nil,
+    metadata: [String: String] = [:]
+) async throws -> [DocumentChunk]
+```
+
+- **Parameters**:
+  - `fileURL`: Local file URL. Supports `.pdf`, `.md`, `.swift`, `.py`, `.js`, `.ts`, `.csv`, `.json`, `.txt`, and more.
+  - `loader`: Optional explicit loader. If `nil`, `AutoDocumentLoader` selects one based on file extension.
+  - `tags`: Tags attached to all chunks for later filtering with `DocumentFilter`.
+  - `userId`: Optional user scope for multi-user knowledge bases.
+  - `metadata`: Optional extra string metadata stored with each chunk.
+- **Returns**: Array of `DocumentChunk` records indexed into the `KnowledgeBaseIndex`.
+
+---
+
+### `ingestDocumentData(data:filename:tags:userId:metadata:)` ⭐ New
+
+Ingests raw `Data` (e.g., from a network download or in-memory buffer) as a document.
+
+```swift
+public func ingestDocumentData(
+    data: Data,
+    filename: String,
+    tags: [String] = [],
+    userId: String? = nil,
+    metadata: [String: String] = [:]
+) async throws -> [DocumentChunk]
+```
+
+- **Parameters**:
+  - `data`: Raw file bytes.
+  - `filename`: Used to infer file type (e.g. `"report.md"`, `"data.csv"`).
+  - `tags`, `userId`, `metadata`: Same as `ingestDocument`.
+- **Returns**: Array of `DocumentChunk` records.
+
+---
+
+
+
 ## 🔍 Retrieval & Search APIs
 
 ### `search(query:userId:agentId:runId:filters:limit:)`
@@ -95,7 +143,75 @@ public func getRelations(
 
 ---
 
-### `recall(userId:limit:)`
+### `searchKnowledgeBase(query:limit:filter:)` ⭐ New
+
+Searches the `KnowledgeBaseIndex` (document RAG index) by semantic similarity.
+
+```swift
+public func searchKnowledgeBase(
+    query: String,
+    limit: Int = 10,
+    filter: DocumentFilter? = nil
+) async throws -> [RetrievalResult]
+```
+
+- **Parameters**:
+  - `query`: Natural language search query.
+  - `limit`: Maximum number of chunks to return.
+  - `filter`: Optional `DocumentFilter` to scope by tags, userId, date range, or MIME type.
+- **Returns**: Array of `RetrievalResult` — each contains a `DocumentChunk` and a `score` (0.0–1.0).
+
+```swift
+let results = try await synapse.searchKnowledgeBase(
+    query: "Q3 revenue growth drivers",
+    limit: 5,
+    filter: DocumentFilter(tags: ["finance"])
+)
+for result in results {
+    print("Score: \(result.score) | \(result.chunk.documentTitle)")
+}
+```
+
+---
+
+### `retrieveContext(query:limit:filter:)` ⭐ New
+
+Retrieves semantically relevant document chunks and assembles them into an LLM-ready `RAGContext` with inline `[1][2]` citation markers and a bibliography.
+
+```swift
+public func retrieveContext(
+    query: String,
+    limit: Int = 5,
+    filter: DocumentFilter? = nil
+) async throws -> RAGContext
+```
+
+- **Parameters**: Same as `searchKnowledgeBase`.
+- **Returns**: A `RAGContext` containing:
+  - `contextPrompt`: Formatted text block with numbered source headers, ready to append to an LLM prompt.
+  - `citations`: Array of `Citation` structs for UI display.
+  - `totalChunks`: Number of chunks included.
+  - `bibliography()`: Formatted source reference list.
+
+```swift
+let ragContext = try await synapse.retrieveContext(
+    query: "What were the main revenue drivers?",
+    limit: 4
+)
+
+let fullPrompt = """
+Use only the provided sources to answer.
+\(ragContext.contextPrompt)
+Question: What were the main revenue drivers?
+"""
+let answer = try await provider.generate(prompt: fullPrompt)
+print(ragContext.bibliography())
+// [1] "Q3 Strategy Deck" - Revenue Highlights, Page 5 (file:///docs/q3.pdf)
+```
+
+---
+
+
 
 Retrieves the chronological recall memory dialogue log for a user.
 

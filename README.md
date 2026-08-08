@@ -45,6 +45,14 @@ for item in results {
 // 5. Query Knowledge Graph Triples (Mem0 & Graphiti feature)
 let triples = try await synapse.getRelations(userId: "alex_123")
 // Prints: Alex -> [lives_in] -> Bangkok
+
+// 6. RAG — Ingest a file and retrieve LLM-ready context with citations
+let pdfURL = Bundle.main.url(forResource: "Q3Report", withExtension: "pdf")!
+let chunks = try await synapse.ingestDocument(fileURL: pdfURL, tags: ["finance", "Q3"])
+
+let ragContext = try await synapse.retrieveContext(query: "What was the revenue growth?", limit: 4)
+print(ragContext.contextPrompt)   // Ready-to-paste LLM prompt with [1][2] citations
+print(ragContext.bibliography())  // [1] "Q3Report.pdf" - Revenue Section, Page 4
 ```
 
 ---
@@ -70,6 +78,10 @@ Why pay recurring server bills or manage Docker containers when Apple Silicon ca
 | **On-Device Apple Foundation Models & Guided Generation** | ✅ Native Zero-Config | ❌ Cloud API / Ollama | ❌ Cloud API | ❌ Cloud API / Ollama | ❌ Cloud API |
 | **Local Offline LLM Support (Ollama on Mac)** | ✅ Built-in (`OllamaProvider`) | ⚠️ Local Python | ❌ Cloud Only | ⚠️ Local vLLM | ❌ Cloud Only |
 | **Apple Native Ecosystem (CoreSpotlight & Siri AppIntents)**| ✅ Native iOS/macOS | ❌ Not Supported | ❌ Not Supported | ❌ Not Supported | ❌ Not Supported |
+| **Multi-Format RAG Document Loaders (PDF, MD, Code, CSV, JSON)** | ✅ Built-in (6 loaders) | ❌ Not Supported | ❌ Not Supported | ❌ Not Supported | ❌ Not Supported |
+| **Recursive & Syntax-Aware Chunking Strategies** | ✅ 3 built-in strategies | ❌ Not Supported | ❌ Not Supported | ❌ Not Supported | ❌ Not Supported |
+| **On-Device Vision OCR (Apple Vision Framework)** | ✅ Zero-cost on-device | ❌ Not Supported | ❌ Not Supported | ❌ Not Supported | ❌ Not Supported |
+| **Citation Tracking & RAG Context with Numbered References** | ✅ Built-in `RAGContextBuilder` | ❌ Not Supported | ❌ Not Supported | ❌ Not Supported | ❌ Not Supported |
 
 > For a detailed architectural deep dive, see **[Competitor Comparison & Analysis](docs/architecture/competitor-comparison.md)**.
 
@@ -88,11 +100,12 @@ Explore complete, granular documentation inside the [`docs/`](docs/README.md) di
 | 📖 **Guides** | **[Agent & LLM Integration](docs/guides/agent-integration.md)** | Standard OpenAPI/JSON schema tools for `SynapseAgent` & Foundation Models. |
 | | **[Conversational Memory](docs/guides/conversational-memory.md)** | State machine (`ADD`, `UPDATE`, `DELETE`), bi-temporal fact superseding. |
 | | **[Knowledge Graph](docs/guides/knowledge-graph.md)** | Entity triple extraction, SQLite graph store, and graph traversal. |
-| | **[Document Ingestion](docs/guides/document-ingestion.md)** | Supermemory-style document/URL ingestion, chunking, and auto-tagging. |
+| | **[Document & RAG Ingestion](docs/guides/document-ingestion.md)** | PDF, Markdown, Code, CSV/JSON loaders; RecursiveCharacter/Code/PDF chunkers; Vision OCR; `ingest()` & `ingestDocument()`. |
+| | **[RAG Pipeline Architecture](docs/guides/rag-pipeline.md)** | Full pipeline: Loaders → Chunkers → KnowledgeBaseIndex → RAGRetriever → RAGContext with citations & bibliography. |
 | | **[Hybrid Search Engine](docs/guides/hybrid-search.md)** | Fusion of SIMD vector search (`vDSP`), SQLite FTS5 BM25, and time-decay. |
 | | **[CloudKit Private Sync](docs/guides/cloudkit-sync.md)** | Encrypted multi-device sync, delta change tokens, and offline queues. |
 | | **[Apple Integrations](docs/guides/apple-integrations.md)** | Spotlight system indexing, Siri AppIntents, and `BGTaskScheduler`. |
-| 🛈 **API Reference** | **[SynapseClient API](docs/api-reference/synapse-client.md)** | Complete Swift API reference for `SynapseClient` actor methods. |
+| 🛈 **API Reference** | **[SynapseClient API](docs/api-reference/synapse-client.md)** | Complete Swift API reference for `SynapseClient` actor methods, including RAG APIs. |
 | | **[Intelligence Providers](docs/api-reference/intelligence-providers.md)** | Apple Foundation Models, Ollama, OpenAI, and Mock providers. |
 
 ---
