@@ -16,6 +16,8 @@ public actor SynapseClient: CoreMemoryManager, MemoryAgentTool {
     public let chunker: ContentChunker
     public let syncEngine: CloudKitSyncEngine?
     public let spotlightIndexer: CoreSpotlightIndexer
+    public let knowledgeBaseIndex: KnowledgeBaseIndex
+    public let ragRetriever: RAGRetriever
 
     private let logger = Logger(subsystem: "com.synapse.memory.swift", category: "SynapseClient")
 
@@ -44,6 +46,9 @@ public actor SynapseClient: CoreMemoryManager, MemoryAgentTool {
 
         self.summarizer = DialogueSummarizer(llmProvider: config.llmProvider)
         self.chunker = ContentChunker()
+        let kbIndex = KnowledgeBaseIndex(embeddingProvider: config.embeddingProvider)
+        self.knowledgeBaseIndex = kbIndex
+        self.ragRetriever = RAGRetriever(index: kbIndex)
 
         if config.enableAutoSync {
             let engine = CloudKitSyncEngine(containerId: config.cloudKitContainerId)
@@ -347,6 +352,84 @@ public actor SynapseClient: CoreMemoryManager, MemoryAgentTool {
     ) async throws -> [DocumentItem] {
         let vector = try await config.embeddingProvider.embed(text: query)
         return try await vectorStore.searchDocuments(query: query, vector: vector, limit: limit, userId: userId)
+    }
+
+    /// Ingests a local file (PDF, Markdown, Code, PlainText, CSV/JSON, Notes export) into the Knowledge Base Index.
+    @discardableResult
+    public func ingestDocument(
+        fileURL: URL,
+        loader: (any DocumentLoader)? = nil,
+        tags: [String] = [],
+        userId: String? = nil,
+        metadata: [String: String] = [:]
+    ) async throws -> [DocumentChunk] {
+        let docLoader = loader ?? AutoDocumentLoader()
+        let loadedDocs = try await docLoader.load(from: fileURL)
+        var allChunks: [DocumentChunk] = []
+
+        for loaded in loadedDocs {
+            let chunks = try await knowledgeBaseIndex.index(document: loaded, tags: tags, userId: userId)
+            allChunks.append(contentsOf: chunks)
+
+            // Also mirror to persistent vectorStore for backwards compatibility
+            for (idx, chunk) in chunks.enumerated() {
+                let vector = try await config.embeddingProvider.embed(text: "\(loaded.title)\n\(chunk.text)")
+                let doc = DocumentItem(
+                    title: loaded.title,
+                    url: fileURL.absoluteString,
+                    content: chunk.text,
+                    chunkIndex: idx,
+                    totalChunks: chunks.count,
+                    vector: vector,
+                    tags: tags,
+                    userId: userId,
+                    metadata: metadata
+                )
+                try await vectorStore.saveDocument(doc: doc)
+            }
+        }
+
+        return allChunks
+    }
+
+    /// Ingests raw document data into the Knowledge Base Index.
+    @discardableResult
+    public func ingestDocumentData(
+        data: Data,
+        filename: String,
+        loader: (any DocumentLoader)? = nil,
+        tags: [String] = [],
+        userId: String? = nil,
+        metadata: [String: String] = [:]
+    ) async throws -> [DocumentChunk] {
+        let docLoader = loader ?? AutoDocumentLoader()
+        let loadedDocs = try await docLoader.load(data: data, filename: filename, metadata: metadata)
+        var allChunks: [DocumentChunk] = []
+
+        for loaded in loadedDocs {
+            let chunks = try await knowledgeBaseIndex.index(document: loaded, tags: tags, userId: userId)
+            allChunks.append(contentsOf: chunks)
+        }
+
+        return allChunks
+    }
+
+    /// Retrieves an LLM-ready RAG context with numbered citations ([1], [2]) from indexed personal documents.
+    public func retrieveContext(
+        query: String,
+        limit: Int = 5,
+        filter: DocumentFilter? = nil
+    ) async throws -> RAGContext {
+        return try await ragRetriever.retrieveContext(query: query, limit: limit, filter: filter)
+    }
+
+    /// Queries the personal knowledge base index directly.
+    public func searchKnowledgeBase(
+        query: String,
+        limit: Int = 5,
+        filter: DocumentFilter? = nil
+    ) async throws -> [RetrievalResult] {
+        return try await knowledgeBaseIndex.retrieve(query: query, limit: limit, filter: filter)
     }
 
     // MARK: - Letta/MemGPT Hierarchical Recall Memory
