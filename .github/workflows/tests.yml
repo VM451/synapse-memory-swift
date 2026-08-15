@@ -1,0 +1,58 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build & Test
+    # Package targets macOS 27 / iOS 27, so it needs the macOS 27 SDK that
+    # ships with Xcode 27. The `xcode-27` runner image is public preview,
+    # arm64-only: https://github.com/actions/runner-images/issues/14404
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select newest Xcode
+        run: |
+          best_app=""
+          best_ver="0"
+          for app in /Applications/Xcode*.app; do
+            [ -d "$app" ] || continue
+            ver="$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$app/Contents/Info.plist" 2>/dev/null || echo 0)"
+            if [ "$(printf '%s\n%s\n' "$best_ver" "$ver" | sort -rn | head -1)" = "$ver" ]; then
+              best_ver="$ver"
+              best_app="$app"
+            fi
+          done
+          [ -n "$best_app" ] || { echo "::error::No Xcode installation found on this runner"; exit 1; }
+          echo "Selecting $best_app (Xcode $best_ver)"
+          sudo xcode-select -s "$best_app/Contents/Developer"
+          xcodebuild -version
+          xcrun swift --version
+
+      - name: Verify macOS 27 SDK
+        run: |
+          sdk="$(xcrun --sdk macosx --show-sdk-version)"
+          echo "macOS SDK: $sdk"
+          [ "${sdk%%.*}" -ge 27 ] || { echo "::error::This package requires the macOS 27 SDK (found $sdk). Use an Xcode 27 runner image."; exit 1; }
+
+      - name: Cache SwiftPM build artifacts
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-${{ env.ImageOS }}-spm-${{ hashFiles('Package.swift', 'Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ env.ImageOS }}-spm-
+
+      - name: Run full test suite (Swift Testing)
+        run: swift test
