@@ -40,11 +40,11 @@ jobs:
           xcodebuild -version
           xcrun swift --version
 
-      - name: Verify macOS 27 SDK
+      - name: Verify macOS SDK
         run: |
           sdk="$(xcrun --sdk macosx --show-sdk-version)"
           echo "macOS SDK: $sdk"
-          [ "${sdk%%.*}" -ge 27 ] || { echo "::error::This package requires the macOS 27 SDK (found $sdk). Use an Xcode 27 runner image."; exit 1; }
+          [ "${sdk%%.*}" -ge 14 ] || { echo "::error::This package requires the macOS 14 SDK or newer (found $sdk)."; exit 1; }
 
       - name: Cache SwiftPM build artifacts
         uses: actions/cache@v4
@@ -55,4 +55,4 @@ jobs:
             ${{ runner.os }}-${{ env.ImageOS }}-spm-
 
       - name: Run full test suite (Swift Testing)
-        run: swift test
+        run: swift test --disable-sandbox

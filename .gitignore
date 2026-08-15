@@ -4,3 +4,8 @@
 *.xcodeproj/xcuserdata/
 *.xcworkspace/xcuserdata/
 scratch/
+
+# Agent Rules & Context
+AGENTS.md
+context/
+
